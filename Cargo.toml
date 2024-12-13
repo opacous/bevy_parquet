@@ -1,0 +1,19 @@
+[package]
+name = "bevy_parquet"
+version = "0.1.0"
+edition = "2021"
+description = "A Bevy plugin for serializing ECS components to Parquet files"
+license = "MIT"
+
+[dependencies]
+bevy = { version = "0.14.2", default-features = false, features = ["serialize"] }
+arrow = "47.0"
+parquet = "47.0"
+uuid = { version = "1.6", features = ["v4"] }
+thiserror = "1.0"
+tracing = "0.1"
+serde_json = "1.0"
+
+[[example]]
+name = "basic_serialization"
+path = "examples/basic_serialization.rs"
