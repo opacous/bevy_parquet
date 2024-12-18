@@ -240,39 +240,46 @@ fn component_to_arrow_array(
                         // let reflect_serializer =
                         //     ReflectSerializer::new(output_field_reflect, type_registry);
                         // serde_json::to_string(&reflect_serializer)
-                        Ok(format!("{:?}", output_field_reflect).to_string())
+                        (format!("{:?}", output_field_reflect).to_string())
                     }
-                    ReflectRef::Value(inner) => Ok(format!("{:?}", inner).to_string()),
+                    ReflectRef::Value(inner) => format!("{:?}", inner).to_string(),
                     ReflectRef::TupleStruct(inner) => {
-                        Ok(format!("{:?}", inner.field(0).unwrap()).to_string())
+                        (format!("{:?}", inner.field(0).unwrap()).to_string())
                     }
-                    _ => Err("this not struct with output field what".to_string()),
+                    ReflectRef::Tuple(inner) => format!("{:?}", inner.field(0).unwrap()),
+                    ReflectRef::List(inner) => {
+                        format!(
+                            "[{:?}]",
+                            inner
+                                .iter()
+                                .fold("".to_string(), |acc, x| acc + &format!("{:?}, ", x))
+                        )
+                    }
+                    ReflectRef::Array(inner) => format!(
+                        "[{:?}]",
+                        inner
+                            .iter()
+                            .fold("".to_string(), |acc, x| acc + &format!("{:?}, ", x))
+                    ),
+                    _ => format!("{:?}", reflect),
                 };
 
-                match output_field {
-                    Ok(json) => {
-                        // TODO: Disgusting stuff here to get the output prop of the reflected type using
-                        //       serde again
-
-                        println!("field here looks like: {}", json);
-                        values.push(json);
-                        // let reflected_json =
-                        //     serde_json::from_str::<serde_json::Value>(&json).unwrap();
-                        // match reflected_json.clone() {
-                        //     // TODO: Tie this back to export type
-                        //     serde_json::Value::Number(map) => {
-                        //         values.push(Some(map.to_string()));
-                        //     }
-                        //     serde_json::Value::String(map) => {
-                        //         values.push(Some(map));
-                        //     }
-                        //     _ => {
-                        //         values.push(Some(json));
-                        //     }
-                        // }
-                    }
-                    Err(e) => return Err(ParquetError::Serialization(e.to_string())),
-                }
+                println!("field here looks like: {}", output_field);
+                values.push(output_field);
+                // let reflected_json =
+                //     serde_json::from_str::<serde_json::Value>(&json).unwrap();
+                // match reflected_json.clone() {
+                //     // TODO: Tie this back to export type
+                //     serde_json::Value::Number(map) => {
+                //         values.push(Some(map.to_string()));
+                //     }
+                //     serde_json::Value::String(map) => {
+                //         values.push(Some(map));
+                //     }
+                //     _ => {
+                //         values.push(Some(json));
+                //     }
+                // }
             }
         }
     }
