@@ -12,6 +12,8 @@ use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
+mod persistence_tracking;
+
 #[derive(Error, Debug)]
 pub enum ParquetError {
     #[error("IO error: {0}")]
@@ -27,6 +29,7 @@ pub enum ParquetError {
 pub struct ParquetConfig {
     /// Path where the parquet file will be written
     pub output_path: String,
+    pub file_name: Option<String>,
     /// Optional manual component clusters
     pub component_clusters: Option<Vec<Vec<(String, ComponentId)>>>,
     /// Parquet writer properties
@@ -36,7 +39,8 @@ pub struct ParquetConfig {
 impl Default for ParquetConfig {
     fn default() -> Self {
         Self {
-            output_path: "ecs_snapshot".to_string(),
+            output_path: "./".to_string(),
+            file_name: None,
             component_clusters: None,
             writer_properties: WriterProperties::builder().build(),
         }
@@ -95,11 +99,14 @@ pub fn serialize_world(world: &mut World) -> Result<(), ParquetError> {
             let file = std::fs::File::create(format!(
                 "{}_{}.parquet",
                 config.output_path,
-                cluster.iter().fold("".to_string(), |acc, (name, _id)| {
-                    let mut retv = acc.to_string();
-                    retv.push_str(name);
-                    retv
-                })
+                config.file_name.as_ref().unwrap_or(&cluster.iter().fold(
+                    "".to_string(),
+                    |acc, (name, _id)| {
+                        let retv = name.to_string().split("::").last().unwrap().to_string();
+                        println!("Filed Name: {}", retv);
+                        acc + &retv + "_"
+                    }
+                ))
             ))
             .map_err(ParquetError::Io)?;
             ArrowWriter::try_new(
