@@ -1,11 +1,14 @@
+#![feature(trait_upcasting)]
+
 use arrow::array::{ArrayRef, RecordBatch, StringArray};
 use bevy::ecs::component::ComponentId;
 use bevy::prelude::*;
-use bevy::reflect::serde::ReflectSerializer;
-use bevy::reflect::{TypeData, TypeRegistration, TypeRegistry};
+use bevy::reflect::serde::{ReflectSerializer, TypedReflectDeserializer};
+use bevy::reflect::{ReflectKind, ReflectRef, TypeData, TypeRegistration, TypeRegistry};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -229,15 +232,26 @@ fn component_to_arrow_array(
                 });
 
             if let Some(reflect) = reflect {
-                let reflect_serializer = ReflectSerializer::new(reflect, type_registry);
-                match serde_json::to_string(&reflect_serializer) {
+                let reflect_discrete = reflect.reflect_ref();
+                let output_field = match reflect_discrete {
+                    // TODO: Assuming all structs are
+                    ReflectRef::Struct(inner) => {
+                        let output_field_reflect = inner.field("output").unwrap_or(inner);
+                        let reflect_serializer =
+                            ReflectSerializer::new(output_field_reflect, type_registry);
+                        serde_json::to_string(&reflect_serializer)
+                    }
+                    _ => Ok({ "this not struct with output field what".to_string() }),
+                };
+
+                match output_field {
                     Ok(json) => {
                         // TODO: Disgusting stuff here to get the output prop of the reflected type using
                         //       serde again
 
                         let reflected_json =
                             serde_json::from_str::<serde_json::Value>(&json).unwrap();
-                        match reflected_json["output"].clone() {
+                        match reflected_json.clone() {
                             // TODO: Tie this back to export type
                             serde_json::Value::Number(map) => {
                                 values.push(Some(map.to_string()));
