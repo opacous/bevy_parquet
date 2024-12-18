@@ -237,11 +237,12 @@ fn component_to_arrow_array(
                     // TODO: Assuming all structs are
                     ReflectRef::Struct(inner) => {
                         let output_field_reflect = inner.field("output").unwrap_or(inner);
-                        let reflect_serializer =
-                            ReflectSerializer::new(output_field_reflect, type_registry);
-                        serde_json::to_string(&reflect_serializer)
+                        // let reflect_serializer =
+                        //     ReflectSerializer::new(output_field_reflect, type_registry);
+                        // serde_json::to_string(&reflect_serializer)
+                        Ok(format!("{:?}", output_field_reflect).to_string())
                     }
-                    _ => Ok({ "this not struct with output field what".to_string() }),
+                    _ => Err("this not struct with output field what".to_string()),
                 };
 
                 match output_field {
