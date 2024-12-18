@@ -242,6 +242,10 @@ fn component_to_arrow_array(
                         // serde_json::to_string(&reflect_serializer)
                         Ok(format!("{:?}", output_field_reflect).to_string())
                     }
+                    ReflectRef::Value(inner) => Ok(format!("{:?}", inner).to_string()),
+                    ReflectRef::TupleStruct(inner) => {
+                        Ok(format!("{:?}", inner.field(0).unwrap()).to_string())
+                    }
                     _ => Err("this not struct with output field what".to_string()),
                 };
 
