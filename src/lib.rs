@@ -82,9 +82,25 @@ pub fn serialize_world(world: &mut World) -> Result<(), ParquetError> {
     };
     println!("Detected Clusters: {:?}", clusters);
     let mut state = world.resource_mut::<ParquetState>();
-    state.component_clusters = clusters.clone();
 
-    // Create file
+    // TODO: This is rather stupid way to deal with ReflectedTypes that are NOT meant to be deserialized into parquet
+    //       All this does is that it filters out clusters that does not have the PhantomPersistTag (which is...
+    //       part of the Persistence module). Eventually do this better, but automated clustering will always
+    //       have this proplem - the correct answer is to use the manual batching ComponentID specification.
+    let clusters = clusters
+        .into_iter()
+        .filter_map(|cluster| {
+            if cluster
+                .iter()
+                .any(|(name, _id)| name.contains("PhantomPersistTag"))
+            {
+                Some(cluster)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    state.component_clusters = clusters.clone();
 
     // Process each cluster as a row group
     for (i, cluster) in clusters.into_iter().enumerate() {
