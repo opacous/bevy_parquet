@@ -232,8 +232,23 @@ fn component_to_arrow_array(
                 let reflect_serializer = ReflectSerializer::new(reflect, type_registry);
                 match serde_json::to_string(&reflect_serializer) {
                     Ok(json) => {
-                        println!("{}", json);
-                        values.push(Some(json));
+                        // TODO: Disgusting stuff here to get the output prop of the reflected type using
+                        //       serde again
+
+                        let reflected_json =
+                            serde_json::from_str::<serde_json::Value>(&json).unwrap();
+                        match reflected_json["output"].clone() {
+                            // TODO: Tie this back to export type
+                            serde_json::Value::Number(map) => {
+                                values.push(Some(map.to_string()));
+                            }
+                            serde_json::Value::String(map) => {
+                                values.push(Some(map));
+                            }
+                            _ => {
+                                values.push(Some(json));
+                            }
+                        }
                     }
                     Err(e) => return Err(ParquetError::Serialization(e.to_string())),
                 }
