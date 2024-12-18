@@ -99,14 +99,20 @@ pub fn serialize_world(world: &mut World) -> Result<(), ParquetError> {
             let file = std::fs::File::create(format!(
                 "{}_{}.parquet",
                 config.output_path,
-                config.file_name.as_ref().unwrap_or(&cluster.iter().fold(
-                    "".to_string(),
-                    |acc, (name, _id)| {
-                        let retv = name.to_string().split("::").last().unwrap().to_string();
-                        println!("Filed Name: {}", retv);
-                        acc + &retv + "_"
+                config.file_name.as_ref().unwrap_or({
+                    let mut field_fold_name =
+                        cluster.iter().fold("".to_string(), |acc, (name, _id)| {
+                            let retv = name.to_string().split("::").last().unwrap().to_string();
+                            println!("Filed Name: {}", retv);
+                            acc + &retv + "_"
+                        });
+
+                    if field_fold_name.len() > 20 {
+                        field_fold_name = field_fold_name.split_at(20).0.to_string();
                     }
-                ))
+
+                    &field_fold_name.clone()
+                })
             ))
             .map_err(ParquetError::Io)?;
             ArrowWriter::try_new(
@@ -359,12 +365,6 @@ impl<T: Debug> Report for T {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
 
     #[test]
     fn test_plugin_initialization() {
