@@ -23,6 +23,12 @@ struct Health {
     value: i32,
 }
 
+// inconsequential component that is sometimes bundled with Health
+#[derive(Component)]
+struct DontSerialize {
+    inner: bool,
+}
+
 fn main() {
     let mut app = App::new();
 
@@ -38,7 +44,7 @@ fn main() {
     // Add plugin and configure
     app.add_plugins(ParquetPlugin)
         .insert_resource(ParquetConfig {
-            output_path: "example_snapshot.parquet".to_string(),
+            output_path: "./".to_string(),
             ..Default::default()
         })
         .add_systems(Startup, spawn_things)
@@ -58,10 +64,16 @@ fn serialize(world: &mut World) {
     }
 }
 
+fn exit_after_timeout(time: Res<Time>, mut exit: EventWriter<AppExit>) {
+    if time.elapsed_seconds() > 10.0 {
+        exit.send(AppExit::Success);
+    }
+}
+
 // Spawn some entities with different component combinations
 fn spawn_things(mut commands: Commands) {
     commands.spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 1.0 }));
     commands.spawn((Position { x: 5.0, y: 5.0 }, Velocity { x: -1.0, y: 0.0 }));
-    commands.spawn((Health { value: 100 },));
+    commands.spawn((Health { value: 100 }, DontSerialize { inner: true }));
     commands.spawn((Health { value: 50 },));
 }
