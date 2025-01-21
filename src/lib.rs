@@ -107,6 +107,7 @@ pub fn serialize_world(world: &mut World) -> Result<(), ParquetError> {
 
     // Process each cluster as a row group
     for (i, cluster) in clusters.into_iter().enumerate() {
+        println!("Processing cluster {:?}", cluster);
         let props = WriterProperties::builder()
             .set_compression(Compression::SNAPPY)
             .build();
@@ -155,32 +156,22 @@ pub fn serialize_world(world: &mut World) -> Result<(), ParquetError> {
 
         // Create arrays for each component
         let mut arrays = Vec::new();
-        // arrays.push(("UUID".to_string(), create_uuid_array(&entities)));
 
         for type_id in cluster {
             let array = component_to_arrow_array(world, &entities, type_id.clone(), type_registry)?;
             arrays.push((type_id.0.clone(), array));
         }
 
-        println!("{:?}", arrays);
         // Create RecordBatch and write it
         let record_batch = RecordBatch::try_from_iter(arrays.into_iter())
             .map_err(|e| ParquetError::ParquetWrite(e.to_string()))?;
 
-        println!(
-            "Writing record batch with schema: {:?}",
-            record_batch.schema()
-        );
-        println!("Record batch row count: {}", record_batch.num_rows());
+        println!("Writing record batch");
+        println!("{:?}", record_batch);
 
         writer
             .write(&record_batch)
             .map_err(|e| ParquetError::ParquetWrite(e.to_string()))?;
-
-        // Ensure data is flushed
-        // writer
-        //     .flush()
-        //     .map_err(|e| ParquetError::ParquetWrite(e.to_string()))?;
 
         writer
             .close()

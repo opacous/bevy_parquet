@@ -29,8 +29,13 @@ struct DontSerialize {
     inner: bool,
 }
 
+#[derive(Component, Reflect, Default)]
+#[reflect(Component)]
+struct PhantomPersistTag;
+
 fn main() {
     let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
 
     // Register types
     let type_registry = app.world().resource::<AppTypeRegistry>();
@@ -39,6 +44,7 @@ fn main() {
         registry.register::<Position>();
         registry.register::<Velocity>();
         registry.register::<Health>();
+        registry.register::<PhantomPersistTag>();
     }
 
     // Add plugin and configure
@@ -48,32 +54,36 @@ fn main() {
             ..Default::default()
         })
         .add_systems(Startup, spawn_things)
-        .add_systems(PostStartup, serialize);
+        .add_systems(PostStartup, serialize)
+        .add_systems(Update, exit_after_timeout)
+        ;
+
+    // Serialize world() state
+    if let Err(e) = serialize_world(app.world_mut()) {
+        eprintln!("Failed to serialize world: {}", e);
+    }
 
     app.run();
 
-    // // Serialize world() state
-    // if let Err(e) = serialize_world(app.world_mut()) {
-    //     eprintln!("Failed to serialize world: {}", e);
-    // }
 }
 
 fn serialize(world: &mut World) {
+    println!("Serializing world");
     if let Err(e) = serialize_world(world) {
         eprintln!("Failed to serialize world: {}", e);
     }
 }
 
 fn exit_after_timeout(time: Res<Time>, mut exit: EventWriter<AppExit>) {
-    if time.elapsed_seconds() > 10.0 {
+    if time.elapsed_seconds() > 3.0 {
         exit.send(AppExit::Success);
     }
 }
 
 // Spawn some entities with different component combinations
 fn spawn_things(mut commands: Commands) {
-    commands.spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 1.0 }));
-    commands.spawn((Position { x: 5.0, y: 5.0 }, Velocity { x: -1.0, y: 0.0 }));
-    commands.spawn((Health { value: 100 }, DontSerialize { inner: true }));
-    commands.spawn((Health { value: 50 },));
+    commands.spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 1.0 }, PhantomPersistTag));
+    commands.spawn((Position { x: 5.0, y: 5.0 }, Velocity { x: -1.0, y: 0.0 }, PhantomPersistTag));
+    commands.spawn((Health { value: 100 }, DontSerialize { inner: true }, PhantomPersistTag));
+    commands.spawn((Health { value: 50 }, PhantomPersistTag));
 }

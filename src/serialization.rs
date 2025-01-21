@@ -87,8 +87,12 @@ pub(crate) fn create_arrow_schema(components: &[(String, ComponentId)]) -> Schem
     let mut fields = Vec::new();
 
     // Add fields for each component
+    // NOTE: Name here lokks something like "bevy::ecs::component::ComponentId"
+    //       which is not what we want. This is jank but we are going to split on "::"
+    //       to get the name of the component.
+
     for (name, type_id) in components {
-        fields.push(Field::new(name, DataType::Utf8, true));
+        fields.push(Field::new(name.split("::").last().unwrap(), DataType::Utf8, true));
     }
 
     Schema::new(fields)
