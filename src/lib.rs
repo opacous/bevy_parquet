@@ -1,6 +1,7 @@
 #![feature(trait_upcasting)]
 
-use arrow::array::{ArrayRef, RecordBatch, StringArray};
+use arrow::array::{ArrayRef, Float32Builder, Int32Builder, RecordBatch, StringArray, StructArray};
+use arrow::datatypes::{DataType, Field};
 use bevy::ecs::component::ComponentId;
 use bevy::prelude::*;
 use bevy::reflect::serde::{ReflectSerializer, TypedReflectDeserializer};
@@ -112,7 +113,7 @@ pub fn serialize_world(world: &mut World) -> Result<(), ParquetError> {
             .set_compression(Compression::SNAPPY)
             .build();
 
-        let schema = create_arrow_schema(&cluster);
+        let schema = create_arrow_schema(&cluster, world, type_registry);
 
         let mut writer = {
             // For subsequent clusters, open the file in append mode
@@ -188,94 +189,80 @@ fn component_to_arrow_array(
     component_info: (String, ComponentId),
     type_registry: &TypeRegistry,
 ) -> Result<ArrayRef, ParquetError> {
-    let mut values = Vec::with_capacity(entities.len());
-    let components = world.components();
+    let (name, cid) = component_info;
+    let registry = type_registry.read();
+    let component_info = world.components().get_info(cid)
+        .ok_or_else(|| ParquetError::Serialization("Component not registered".into()))?;
+    let type_id = component_info.type_id()
+        .ok_or_else(|| ParquetError::Serialization("Missing type ID".into()))?;
+    let type_reg = registry.get(type_id)
+        .ok_or_else(|| ParquetError::Serialization("Type not in registry".into()))?;
 
-    for &entity in entities {
-        if let Some(entity_ref) = world.get_entity(entity) {
-            let reflect = world
-                .components()
-                .get_info(component_info.1)
-                .complain_msg("unable to get info for component")
-                .and_then(|info| info.type_id().complain_msg("missing type info"))
-                .and_then(|id| {
-                    println!("Getting type ID {id:?}");
-                    type_registry
-                        .get(id)
-                        .complain_msg("missing type in registry")
-                })
-                .and_then(|reg| {
-                    println!("Getting type registration");
-                    println!("{:?}", reg);
-                    let retv = reg.data::<ReflectComponent>();
-                    println!("reflected does {:?} have something", retv.is_some());
-                    retv
-                })
-                .and_then(|reflect| {
-                    println!(
-                        "{:?} @ entity with ID: {}",
-                        component_info.0,
-                        entity_ref.id()
-                    );
-                    reflect
-                        .reflect(entity_ref)
-                        .complain_msg("unable to reflect")
-                });
+    // Initialize appropriate array builder based on type
+    if let Some(vec3_reflect) = type_reg.downcast::<Vec3>() {
+        // Handle Vec3 as struct array
+        let mut x_builder = Float32Builder::new();
+        let mut y_builder = Float32Builder::new();
+        let mut z_builder = Float32Builder::new();
 
-            if let Some(reflect) = reflect {
-                let reflect_discrete = reflect.reflect_ref();
-                let output_field = match reflect_discrete {
-                    // TODO: Assuming all structs are
-                    ReflectRef::Struct(inner) => {
-                        let output_field_reflect = inner.field("output").unwrap_or(inner);
-                        // let reflect_serializer =
-                        //     ReflectSerializer::new(output_field_reflect, type_registry);
-                        // serde_json::to_string(&reflect_serializer)
-                        (format!("{:?}", output_field_reflect).to_string())
-                    }
-                    ReflectRef::Value(inner) => format!("{:?}", inner).to_string(),
-                    ReflectRef::TupleStruct(inner) => {
-                        (format!("{:?}", inner.field(0).unwrap()).to_string())
-                    }
-                    ReflectRef::Tuple(inner) => format!("{:?}", inner.field(0).unwrap()),
-                    ReflectRef::List(inner) => {
-                        format!(
-                            "[{:?}]",
-                            inner
-                                .iter()
-                                .fold("".to_string(), |acc, x| acc + &format!("{:?}, ", x))
-                        )
-                    }
-                    ReflectRef::Array(inner) => format!(
-                        "[{:?}]",
-                        inner
-                            .iter()
-                            .fold("".to_string(), |acc, x| acc + &format!("{:?}, ", x))
-                    ),
-                    _ => format!("{:?}", reflect),
-                };
-
-                println!("field here looks like: {}", output_field);
-                values.push(output_field);
-                // let reflected_json =
-                //     serde_json::from_str::<serde_json::Value>(&json).unwrap();
-                // match reflected_json.clone() {
-                //     // TODO: Tie this back to export type
-                //     serde_json::Value::Number(map) => {
-                //         values.push(Some(map.to_string()));
-                //     }
-                //     serde_json::Value::String(map) => {
-                //         values.push(Some(map));
-                //     }
-                //     _ => {
-                //         values.push(Some(json));
-                //     }
-                // }
+        for entity in entities {
+            if let Some(vec3) = world.get::<Vec3>(*entity) {
+                x_builder.append_value(vec3.x);
+                y_builder.append_value(vec3.y);
+                z_builder.append_value(vec3.z);
+            } else {
+                x_builder.append_null();
+                y_builder.append_null();
+                z_builder.append_null();
             }
         }
-    }
 
-    Ok(Arc::new(StringArray::from(values)) as ArrayRef)
+        Ok(Arc::new(StructArray::new(
+            vec![
+                Field::new("x", DataType::Float32, false),
+                Field::new("y", DataType::Float32, false),
+                Field::new("z", DataType::Float32, false),
+            ].into(),
+            vec![
+                Arc::new(x_builder.finish()),
+                Arc::new(y_builder.finish()),
+                Arc::new(z_builder.finish()),
+            ],
+            None,
+        )))
+    } else if let Some(float_reflect) = type_reg.downcast::<f32>() {
+        let mut builder = Float32Builder::new();
+        for entity in entities {
+            if let Some(value) = world.get::<f32>(*entity) {
+                builder.append_value(*value);
+            } else {
+                builder.append_null();
+            }
+        }
+        Ok(Arc::new(builder.finish()))
+    } else if let Some(int_reflect) = type_reg.downcast::<i32>() {
+        let mut builder = Int32Builder::new();
+        for entity in entities {
+            if let Some(value) = world.get::<i32>(*entity) {
+                builder.append_value(*value);
+            } else {
+                builder.append_null();
+            }
+        }
+        Ok(Arc::new(builder.finish()))
+    } else {
+        // Fallback to string serialization for unsupported types
+        let mut values = Vec::new();
+        for entity in entities {
+            let value = world.get_by_id(*entity, cid).map(|c| {
+                let reflect = ReflectComponent::from_world(world)
+                    .reflect(c).ok_or_else(|| ParquetError::Serialization("Component reflection failed".into()))?;
+                Ok::<_, ParquetError>(format!("{:?}", reflect))
+            }).transpose()?;
+            values.push(value);
+        }
+        Ok(Arc::new(StringArray::from(values)))
+    }
 }
 
 pub trait Hope {

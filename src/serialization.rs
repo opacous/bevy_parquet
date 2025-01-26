@@ -1,5 +1,7 @@
-use arrow::array::{ArrayRef, StringArray};
+use arrow::array::{ArrayRef, StringArray, Float32Builder, Int32Builder, StructArray};
 use arrow::datatypes::{DataType, Field, Schema};
+use bevy::math::Vec3;
+use bevy::reflect::{ReflectComponent, ReflectKind};
 use bevy::ecs::component::ComponentId;
 use bevy::prelude::*;
 use bevy::reflect::{GetTypeRegistration, TypeRegistry};
@@ -83,16 +85,48 @@ pub(crate) fn detect_component_clusters(world: &World) -> Vec<Vec<(String, Compo
 }
 
 /// Creates an Arrow schema for a given set of components
-pub(crate) fn create_arrow_schema(components: &[(String, ComponentId)]) -> Schema {
+pub(crate) fn create_arrow_schema(
+    components: &[(String, ComponentId)],
+    world: &World,
+    type_registry: &TypeRegistry,
+) -> Schema {
     let mut fields = Vec::new();
+    let registry = type_registry.read();
 
-    // Add fields for each component
-    // NOTE: Name here lokks something like "bevy::ecs::component::ComponentId"
-    //       which is not what we want. This is jank but we are going to split on "::"
-    //       to get the name of the component.
+    for (component_name, component_id) in components {
+        // Get type information from ComponentId
+        let type_info = world.components().get_info(*component_id)
+            .expect("Component not registered");
+        let type_id = type_info.type_id().expect("Missing type ID");
+        let type_reg = registry.get(type_id).expect("Type not in registry");
 
-    for (name, type_id) in components {
-        fields.push(Field::new(name.split("::").last().unwrap(), DataType::Utf8, true));
+        // Map to Arrow type
+        let data_type = if type_reg.data::<ReflectComponent>().is_some() {
+            match type_reg.type_info().kind() {
+                ReflectKind::Struct(s) if s.is::<Vec3>() => DataType::Struct(vec![
+                    Field::new("x", DataType::Float32, false),
+                    Field::new("y", DataType::Float32, false),
+                    Field::new("z", DataType::Float32, false),
+                ]),
+                ReflectKind::Value => {
+                    if let Some(_) = type_reg.downcast::<f32>() {
+                        DataType::Float32
+                    } else if let Some(_) = type_reg.downcast::<i32>() {
+                        DataType::Int32
+                    } else if let Some(_) = type_reg.downcast::<Entity>() {
+                        DataType::UInt64 // Store entity ID as u64
+                    } else {
+                        DataType::Utf8 // Fallback
+                    }
+                }
+                _ => DataType::Utf8,
+            }
+        } else {
+            DataType::Utf8
+        };
+
+        let short_name = component_name.split("::").last().unwrap();
+        fields.push(Field::new(short_name, data_type, true));
     }
 
     Schema::new(fields)
