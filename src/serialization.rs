@@ -1,12 +1,13 @@
 use arrow::array::{ArrayRef, StringArray, Float32Builder, Int32Builder, StructArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use bevy::math::Vec3;
-use bevy::reflect::{ReflectComponent, ReflectKind};
+use bevy::reflect::{ReflectComponent, ReflectKind, TypeInfo};
 use bevy::ecs::component::ComponentId;
 use bevy::prelude::*;
 use bevy::reflect::{GetTypeRegistration, TypeRegistry};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use bevy::tasks::futures_lite::AsyncReadExt;
 
 /// Detects natural component clusters in the world
 pub(crate) fn detect_component_clusters(world: &World) -> Vec<Vec<(String, ComponentId)>> {
@@ -91,7 +92,7 @@ pub(crate) fn create_arrow_schema(
     type_registry: &TypeRegistry,
 ) -> Schema {
     let mut fields = Vec::new();
-    let registry = type_registry.read();
+    let registry = type_registry;
 
     for (component_name, component_id) in components {
         // Get type information from ComponentId
@@ -102,27 +103,16 @@ pub(crate) fn create_arrow_schema(
 
         // Map to Arrow type
         let data_type = if type_reg.data::<ReflectComponent>().is_some() {
-            match type_reg.type_info().kind() {
-                ReflectKind::Struct(s) if s.is::<Vec3>() => DataType::Struct(vec![
-                    Field::new("x", DataType::Float32, false),
-                    Field::new("y", DataType::Float32, false),
-                    Field::new("z", DataType::Float32, false),
-                ]),
-                ReflectKind::Value => {
-                    if let Some(_) = type_reg.downcast::<f32>() {
-                        DataType::Float32
-                    } else if let Some(_) = type_reg.downcast::<i32>() {
-                        DataType::Int32
-                    } else if let Some(_) = type_reg.downcast::<Entity>() {
-                        DataType::UInt64 // Store entity ID as u64
-                    } else {
-                        DataType::Utf8 // Fallback
-                    }
-                }
-                _ => DataType::Utf8,
+            match type_reg.type_info() {
+                TypeInfo::Struct(_) => {}
+                TypeInfo::TupleStruct(_) => {}
+                TypeInfo::Tuple(_) => {}
+                TypeInfo::List(_) => {}
+                TypeInfo::Array(_) => {}
+                TypeInfo::Map(_) => {}
+                TypeInfo::Enum(_) => {}
+                TypeInfo::Value(_) => {}
             }
-        } else {
-            DataType::Utf8
         };
 
         let short_name = component_name.split("::").last().unwrap();
