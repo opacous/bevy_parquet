@@ -104,15 +104,58 @@ pub(crate) fn create_arrow_schema(
         // Map to Arrow type
         let data_type = if type_reg.data::<ReflectComponent>().is_some() {
             match type_reg.type_info() {
-                TypeInfo::Struct(_) => {}
-                TypeInfo::TupleStruct(_) => {}
-                TypeInfo::Tuple(_) => {}
-                TypeInfo::List(_) => {}
-                TypeInfo::Array(_) => {}
-                TypeInfo::Map(_) => {}
-                TypeInfo::Enum(_) => {}
-                TypeInfo::Value(_) => {}
+                TypeInfo::Struct(s) => {
+                    // Handle Vec3 and other struct types
+                    if s.is::<Vec3>() {
+                        DataType::Struct(vec![
+                            Field::new("x", DataType::Float32, false),
+                            Field::new("y", DataType::Float32, false),
+                            Field::new("z", DataType::Float32, false),
+                        ])
+                    } else {
+                        // Generic struct handling (create nested fields)
+                        DataType::Struct(
+                            s.iter_fields()
+                                .map(|field| {
+                                    Field::new(
+                                        field.name(),
+                                        map_reflect_kind_to_arrow(field.reflect_type()),
+                                        true,
+                                    )
+                                })
+                                .collect()
+                        )
+                    }
+                }
+                TypeInfo::Value(v) => match v.type_name() {
+                    "f32" => DataType::Float32,
+                    "f64" => DataType::Float64,
+                    "i32" => DataType::Int32,
+                    "i64" => DataType::Int64,
+                    "u32" => DataType::UInt32,
+                    "u64" => DataType::UInt64,
+                    "bool" => DataType::Boolean,
+                    "entity" => DataType::UInt64, // Store Entity as UInt64
+                    _ => DataType::Utf8,          // Fallback for unknown value types
+                },
+                TypeInfo::Enum(_) => DataType::Utf8, // Store enums as strings
+                TypeInfo::List(l) => DataType::List(Box::new(Field::new(
+                    "item",
+                    map_reflect_kind_to_arrow(l.item_type()),
+                    true,
+                ))),
+                TypeInfo::Array(a) => DataType::FixedSizeList(
+                    Box::new(Field::new(
+                        "item", 
+                        map_reflect_kind_to_arrow(a.item_type()),
+                        true
+                    )),
+                    a.len() as i32,
+                ),
+                _ => DataType::Utf8, // Fallback for Tuple/Map/TupleStruct
             }
+        } else {
+            DataType::Utf8
         };
 
         let short_name = component_name.split("::").last().unwrap();
@@ -130,4 +173,20 @@ pub(crate) fn create_uuid_array(entities: &[Entity]) -> ArrayRef {
         .collect();
 
     Arc::new(StringArray::from(values)) as ArrayRef
+}
+
+fn map_reflect_kind_to_arrow(reflect: &dyn Reflect) -> DataType {
+    if let Some(_) = reflect.downcast_ref::<f32>() {
+        DataType::Float32
+    } else if let Some(_) = reflect.downcast_ref::<Vec3>() {
+        DataType::Struct(vec![
+            Field::new("x", DataType::Float32, false),
+            Field::new("y", DataType::Float32, false),
+            Field::new("z", DataType::Float32, false),
+        ])
+    } else if reflect.is::<Entity>() {
+        DataType::UInt64
+    } else {
+        DataType::Utf8
+    }
 }
