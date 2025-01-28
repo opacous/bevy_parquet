@@ -191,11 +191,15 @@ fn component_to_arrow_array(
 ) -> Result<ArrayRef, ParquetError> {
     let (name, cid) = component_info;
     let registry = type_registry.read();
-    let component_info = world.components().get_info(cid)
+    let component_info = world
+        .components()
+        .get_info(cid)
         .ok_or_else(|| ParquetError::Serialization("Component not registered".into()))?;
-    let type_id = component_info.type_id()
+    let type_id = component_info
+        .type_id()
         .ok_or_else(|| ParquetError::Serialization("Missing type ID".into()))?;
-    let type_reg = registry.get(type_id)
+    let type_reg = registry
+        .get(type_id)
         .ok_or_else(|| ParquetError::Serialization("Type not in registry".into()))?;
 
     // Initialize appropriate array builder based on type
@@ -222,7 +226,8 @@ fn component_to_arrow_array(
                 Field::new("x", DataType::Float32, false),
                 Field::new("y", DataType::Float32, false),
                 Field::new("z", DataType::Float32, false),
-            ].into(),
+            ]
+            .into(),
             vec![
                 Arc::new(x_builder.finish()),
                 Arc::new(y_builder.finish()),
@@ -254,11 +259,18 @@ fn component_to_arrow_array(
         // Fallback to string serialization for unsupported types
         let mut values = Vec::new();
         for entity in entities {
-            let value = world.get_by_id(*entity, cid).map(|c| {
-                let reflect = ReflectComponent::from_world(world)
-                    .reflect(c).ok_or_else(|| ParquetError::Serialization("Component reflection failed".into()))?;
-                Ok::<_, ParquetError>(format!("{:?}", reflect))
-            }).transpose()?;
+            let value = world
+                .get_by_id(*entity, cid)
+                .map(|c| {
+                    let reflect =
+                        ReflectComponent::from_world(world)
+                            .reflect(c)
+                            .ok_or_else(|| {
+                                ParquetError::Serialization("Component reflection failed".into())
+                            })?;
+                    Ok::<_, ParquetError>(format!("{:?}", reflect))
+                })
+                .transpose()?;
             values.push(value);
         }
         Ok(Arc::new(StringArray::from(values)))
