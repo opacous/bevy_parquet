@@ -1,22 +1,22 @@
 #![feature(trait_upcasting)]
 
+mod config;
+mod state;
+mod writer;
+mod persistence_tracking;
+mod serialization;
+
 use arrow::array::{ArrayRef, Float32Builder, Int32Builder, RecordBatch, StringArray, StructArray};
 use arrow::datatypes::{DataType, Field};
-use bevy::ecs::component::ComponentId;
 use bevy::prelude::*;
-use bevy::reflect::serde::{ReflectSerializer, TypedReflectDeserializer};
-use bevy::reflect::{ReflectKind, ReflectRef, TypeData, TypeRegistration, TypeRegistry};
-use parquet::arrow::ArrowWriter;
-use parquet::basic::Compression;
-use parquet::file::properties::WriterProperties;
-use std::any::TypeId;
-use std::collections::HashMap;
+use bevy::reflect::{ReflectKind, TypeRegistry};
 use std::fmt::Debug;
 use std::sync::Arc;
 use thiserror::Error;
-use uuid::Uuid;
 
-mod persistence_tracking;
+pub use config::ParquetConfig;
+pub use state::ParquetState;
+use writer::ParquetWriter;
 
 #[derive(Error, Debug)]
 pub enum ParquetError {
@@ -28,37 +28,6 @@ pub enum ParquetError {
     Serialization(String),
 }
 
-/// Configuration for the ParquetPlugin
-#[derive(Clone, Resource)]
-pub struct ParquetConfig {
-    /// Path where the parquet file will be written
-    pub output_path: String,
-    pub file_name: Option<String>,
-    /// Optional manual component clusters
-    pub component_clusters: Option<Vec<Vec<(String, ComponentId)>>>,
-    /// Parquet writer properties
-    pub writer_properties: WriterProperties,
-}
-
-impl Default for ParquetConfig {
-    fn default() -> Self {
-        Self {
-            output_path: "./".to_string(),
-            file_name: None,
-            component_clusters: None,
-            writer_properties: WriterProperties::builder().build(),
-        }
-    }
-}
-
-/// Resource holding the current serialization state
-#[derive(Default, Resource)]
-pub struct ParquetState {
-    /// Maps TypeIds to their column indices
-    type_to_column: HashMap<ComponentId, usize>,
-    /// Detected or manually specified component clusters
-    component_clusters: Vec<Vec<(String, ComponentId)>>,
-}
 
 pub struct ParquetPlugin;
 
