@@ -3,6 +3,28 @@ use {
         array::{Array, ArrayRef, StringArray},
         datatypes::{DataType, Field, Fields, Schema},
     },
+
+fn get_phantom_type<T: Reflect + TypePath>(type_info: &TypeInfo) -> Option<DataType> {
+    if let TypeInfo::Struct(s) = type_info {
+        for field in s.iter() {
+            if field.name() == "target_type" {
+                // Extract inner type from PhantomData<T>
+                let path = field.reflect_type_path();
+                if let Some(inner_type) = path.split("PhantomData<").last().and_then(|s| s.strip_suffix('>')) {
+                    return match inner_type {
+                        "f32" => Some(DataType::Float32),
+                        "f64" => Some(DataType::Float64),
+                        "i32" => Some(DataType::Int32),
+                        "i64" => Some(DataType::Int64),
+                        // Add more type mappings as needed
+                        _ => None,
+                    };
+                }
+            }
+        }
+    }
+    None
+}
     bevy::{
         ecs::component::ComponentId,
         math::Vec3,
@@ -113,8 +135,13 @@ pub(crate) fn create_arrow_schema(
         let data_type = if type_reg.data::<ReflectComponent>().is_some() {
             match type_reg.type_info() {
                 TypeInfo::Struct(s) => {
-                    // Directly handle Vec3 without reflection
-                    if s.type_path() == "bevy::math::Vec3" {
+                    // Check for special parsing struct pattern
+                    if let Some(target_type) = get_phantom_type(&TypeInfo::Struct(s.clone())) {
+                        // Handle special struct with output + phantom type
+                        DataType::Struct(Fields::from(vec![
+                            Field::new("output", target_type, false),
+                        ]))
+                    } else if s.type_path() == "bevy::math::Vec3" {
                         DataType::Struct(Fields::from(vec![
                             Field::new("x", DataType::Float32, false),
                             Field::new("y", DataType::Float32, false),
@@ -126,9 +153,17 @@ pub(crate) fn create_arrow_schema(
                             (0..s.field_len())
                                 .map(|i| s.field_at(i).unwrap())
                                 .map(|field| {
+                                    let field_type = if field.name() == "output" {
+                                        // Get the actual type from PhantomData
+                                        get_phantom_type(&TypeInfo::Struct(s.clone()))
+                                            .unwrap_or(DataType::Utf8)
+                                    } else {
+                                        DataType::Utf8
+                                    };
+                                    
                                     Field::new(
                                         field.name(),
-                                        DataType::Utf8,
+                                        field_type,
                                         true,
                                     )
                                 })
