@@ -161,7 +161,7 @@ pub(crate) fn create_arrow_schema(
                         map_reflect_kind_to_arrow(a.item_type()),
                         true,
                     )),
-                    a.len() as i32,
+                    a.field_len() as i32,
                 ),
                 _ => DataType::Utf8, // Fallback for Tuple/Map/TupleStruct
             }
@@ -189,15 +189,15 @@ pub(crate) fn create_uuid_array(entities: &[Entity]) -> ArrayRef {
 fn map_reflect_kind_to_arrow(reflect: &dyn Reflect) -> DataType {
     let type_path = reflect.get_represented_type_info()
         .map(|info| info.type_path())
-        .unwrap_or_else(|| reflect.type_path());
+        .unwrap_or_else(|| reflect.reflect_type_path());
 
     match type_path {
         "f32" => DataType::Float32,
-        "bevy::math::Vec3" => DataType::Struct(vec![
+        "bevy::math::Vec3" => DataType::Struct(Fields::from(vec![
             Field::new("x", DataType::Float32, false),
             Field::new("y", DataType::Float32, false),
             Field::new("z", DataType::Float32, false),
-        ]),
+        ])),
         _ => {
             if reflect.is::<Entity>() {
                 DataType::UInt64
