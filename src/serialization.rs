@@ -3,6 +3,17 @@ use {
         array::{Array, ArrayRef, StringArray},
         datatypes::{DataType, Field, Fields, Schema},
     },
+    bevy::{
+        ecs::component::ComponentId,
+        math::Vec3,
+        prelude::*,
+        reflect::{TypeInfo, TypeRegistry},
+    },
+    std::{
+        collections::{HashMap, HashSet},
+        sync::Arc,
+    },
+};
 
 fn get_phantom_type<T: Reflect + TypePath>(type_info: &TypeInfo) -> Option<DataType> {
     if let TypeInfo::Struct(s) = type_info {
@@ -25,17 +36,6 @@ fn get_phantom_type<T: Reflect + TypePath>(type_info: &TypeInfo) -> Option<DataT
     }
     None
 }
-    bevy::{
-        ecs::component::ComponentId,
-        math::Vec3,
-        prelude::*,
-        reflect::{TypeInfo, TypeRegistry},
-    },
-    std::{
-        collections::{HashMap, HashSet},
-        sync::Arc,
-    },
-};
 
 /// Detects natural component clusters in the world
 pub(crate) fn detect_component_clusters(world: &World) -> Vec<Vec<(String, ComponentId)>> {
