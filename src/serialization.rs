@@ -113,20 +113,28 @@ pub(crate) fn create_arrow_schema(
         let data_type = if type_reg.data::<ReflectComponent>().is_some() {
             match type_reg.type_info() {
                 TypeInfo::Struct(s) => {
-                    // Handle Vec3 and other struct types
-                    // Generic struct handling (create nested fields)
-                    DataType::Struct(
-                        (0..s.field_len())
-                            .map(|i| s.field_at(i).unwrap())
-                            .map(|field| {
-                                Field::new(
-                                    field.name(),
-                                    map_reflect_kind_to_arrow(field.reflect_type()),
-                                    true,
-                                )
-                            })
-                            .collect(),
-                    )
+                    // Directly handle Vec3 without reflection
+                    if s.type_path() == "bevy::math::Vec3" {
+                        DataType::Struct(vec![
+                            Field::new("x", DataType::Float32, false),
+                            Field::new("y", DataType::Float32, false),
+                            Field::new("z", DataType::Float32, false),
+                        ])
+                    } else {
+                        // Existing reflection-based handling for other structs
+                        DataType::Struct(
+                            (0..s.field_len())
+                                .map(|i| s.field_at(i).unwrap())
+                                .map(|field| {
+                                    Field::new(
+                                        field.name(),
+                                        map_reflect_kind_to_arrow(field.reflect_type()),
+                                        true,
+                                    )
+                                })
+                                .collect(),
+                        )
+                    }
                 }
                 TypeInfo::Value(v) => match v.type_path() {
                     "f32" => DataType::Float32,
@@ -177,17 +185,23 @@ pub(crate) fn create_uuid_array(entities: &[Entity]) -> ArrayRef {
 }
 
 fn map_reflect_kind_to_arrow(reflect: &dyn Reflect) -> DataType {
-    if let Some(_) = reflect.downcast_ref::<f32>() {
-        DataType::Float32
-    } else if let Some(_) = reflect.downcast_ref::<Vec3>() {
-        DataType::Struct(vec![
+    let type_path = reflect.get_represented_type_info()
+        .map(|info| info.type_path())
+        .unwrap_or_else(|| reflect.type_path());
+
+    match type_path {
+        "f32" => DataType::Float32,
+        "bevy::math::Vec3" => DataType::Struct(vec![
             Field::new("x", DataType::Float32, false),
             Field::new("y", DataType::Float32, false),
             Field::new("z", DataType::Float32, false),
-        ])
-    } else if reflect.is::<Entity>() {
-        DataType::UInt64
-    } else {
-        DataType::Utf8
+        ]),
+        _ => {
+            if reflect.is::<Entity>() {
+                DataType::UInt64
+            } else {
+                DataType::Utf8
+            }
+        }
     }
 }
