@@ -1,13 +1,19 @@
-use arrow::array::{ArrayRef, StringArray, Float32Builder, Int32Builder, StructArray};
-use arrow::datatypes::{DataType, Field, Schema};
-use bevy::math::Vec3;
-use bevy::reflect::{ReflectComponent, ReflectKind, TypeInfo};
-use bevy::ecs::component::ComponentId;
-use bevy::prelude::*;
-use bevy::reflect::{GetTypeRegistration, TypeRegistry};
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use bevy::tasks::futures_lite::AsyncReadExt;
+use {
+    arrow::{
+        array::{ArrayRef, StringArray},
+        datatypes::{DataType, Field, Schema},
+    },
+    bevy::{
+        ecs::component::ComponentId,
+        math::Vec3,
+        prelude::*,
+        reflect::{TypeInfo, TypeRegistry},
+    },
+    std::{
+        collections::{HashMap, HashSet},
+        sync::Arc,
+    },
+};
 
 /// Detects natural component clusters in the world
 pub(crate) fn detect_component_clusters(world: &World) -> Vec<Vec<(String, ComponentId)>> {
@@ -96,7 +102,9 @@ pub(crate) fn create_arrow_schema(
 
     for (component_name, component_id) in components {
         // Get type information from ComponentId
-        let type_info = world.components().get_info(*component_id)
+        let type_info = world
+            .components()
+            .get_info(*component_id)
             .expect("Component not registered");
         let type_id = type_info.type_id().expect("Missing type ID");
         let type_reg = registry.get(type_id).expect("Type not in registry");
@@ -106,28 +114,21 @@ pub(crate) fn create_arrow_schema(
             match type_reg.type_info() {
                 TypeInfo::Struct(s) => {
                     // Handle Vec3 and other struct types
-                    if s.is::<Vec3>() {
-                        DataType::Struct(vec![
-                            Field::new("x", DataType::Float32, false),
-                            Field::new("y", DataType::Float32, false),
-                            Field::new("z", DataType::Float32, false),
-                        ])
-                    } else {
-                        // Generic struct handling (create nested fields)
-                        DataType::Struct(
-                            s.iter_fields()
-                                .map(|field| {
-                                    Field::new(
-                                        field.name(),
-                                        map_reflect_kind_to_arrow(field.reflect_type()),
-                                        true,
-                                    )
-                                })
-                                .collect()
-                        )
-                    }
+                    // Generic struct handling (create nested fields)
+                    DataType::Struct(
+                        (0..s.field_len())
+                            .map(|i| s.field_at(i).unwrap())
+                            .map(|field| {
+                                Field::new(
+                                    field.name(),
+                                    map_reflect_kind_to_arrow(field.reflect_type()),
+                                    true,
+                                )
+                            })
+                            .collect(),
+                    )
                 }
-                TypeInfo::Value(v) => match v.type_name() {
+                TypeInfo::Value(v) => match v.type_path() {
                     "f32" => DataType::Float32,
                     "f64" => DataType::Float64,
                     "i32" => DataType::Int32,
@@ -139,16 +140,16 @@ pub(crate) fn create_arrow_schema(
                     _ => DataType::Utf8,          // Fallback for unknown value types
                 },
                 TypeInfo::Enum(_) => DataType::Utf8, // Store enums as strings
-                TypeInfo::List(l) => DataType::List(Box::new(Field::new(
+                TypeInfo::List(l) => DataType::List(Arc::new(Field::new(
                     "item",
                     map_reflect_kind_to_arrow(l.item_type()),
                     true,
                 ))),
                 TypeInfo::Array(a) => DataType::FixedSizeList(
-                    Box::new(Field::new(
-                        "item", 
+                    Arc::new(Field::new(
+                        "item",
                         map_reflect_kind_to_arrow(a.item_type()),
-                        true
+                        true,
                     )),
                     a.len() as i32,
                 ),
