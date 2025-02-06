@@ -1,9 +1,7 @@
-use arrow::array::Array;
-use arrow::datatypes::Fields;
 use {
     arrow::{
-        array::{ArrayRef, StringArray},
-        datatypes::{DataType, Field, Schema},
+        array::{Array, ArrayRef, StringArray},
+        datatypes::{DataType, Field, Fields, Schema},
     },
     bevy::{
         ecs::component::ComponentId,
@@ -130,7 +128,7 @@ pub(crate) fn create_arrow_schema(
                                 .map(|field| {
                                     Field::new(
                                         field.name(),
-                                        map_reflect_kind_to_arrow(field.ty().as_value().unwrap()),
+                                        DataType::Utf8,
                                         true,
                                     )
                                 })
@@ -152,26 +150,23 @@ pub(crate) fn create_arrow_schema(
                 TypeInfo::Enum(_) => DataType::Utf8, // Store enums as strings
                 TypeInfo::List(l) => DataType::List(Arc::new(Field::new(
                     "item",
-                    map_reflect_kind_to_arrow(
-                        registry.get(l.item_type_id())
-                                .unwrap()
-                                .data::<ReflectType>()
-                                .unwrap()
-                    ),
+                    DataType::Utf8, // TODO: Make list items reflectable
                     true,
                 ))),
                 TypeInfo::Array(a) => DataType::FixedSizeList(
                     Arc::new(Field::new(
                         "item",
-                        map_reflect_kind_to_arrow(
-                            registry.get(a.item_type_id())
-                                    .unwrap()
-                                    .data::<ReflectType>()
-                                    .unwrap()
+                        map_short_list_type_to_arrow(
+                            registry
+                                .get(a.item_type_id())
+                                .unwrap()
+                                .type_info()
+                                .type_path_table()
+                                .short_path(),
                         ),
                         true,
                     )),
-                    a.array_len() as i32,
+                    a.capacity() as i32,
                 ),
                 _ => DataType::Utf8, // Fallback for Tuple/Map/TupleStruct
             }
@@ -196,8 +191,21 @@ pub(crate) fn create_uuid_array(entities: &[Entity]) -> ArrayRef {
     Arc::new(StringArray::from(values)) as ArrayRef
 }
 
+fn map_short_list_type_to_arrow(type_path: &str) -> DataType {
+    match type_path {
+        "f32" => DataType::Float32,
+        "bevy::math::Vec3" => DataType::Struct(Fields::from(vec![
+            Field::new("x", DataType::Float32, false),
+            Field::new("y", DataType::Float32, false),
+            Field::new("z", DataType::Float32, false),
+        ])),
+        _ => DataType::Utf8,
+    }
+}
+
 fn map_reflect_kind_to_arrow(reflect: &dyn Reflect) -> DataType {
-    let type_path = reflect.get_represented_type_info()
+    let type_path = reflect
+        .get_represented_type_info()
         .map(|info| info.type_path())
         .unwrap_or_else(|| reflect.reflect_type_path());
 
