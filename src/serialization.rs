@@ -130,7 +130,7 @@ pub(crate) fn create_arrow_schema(
                                 .map(|field| {
                                     Field::new(
                                         field.name(),
-                                        map_reflect_kind_to_arrow(field.reflect_type()),
+                                        map_reflect_kind_to_arrow(field.ty().as_value().unwrap()),
                                         true,
                                     )
                                 })
@@ -152,16 +152,26 @@ pub(crate) fn create_arrow_schema(
                 TypeInfo::Enum(_) => DataType::Utf8, // Store enums as strings
                 TypeInfo::List(l) => DataType::List(Arc::new(Field::new(
                     "item",
-                    map_reflect_kind_to_arrow(l.item_type()),
+                    map_reflect_kind_to_arrow(
+                        registry.get(l.item_type_id())
+                                .unwrap()
+                                .data::<ReflectType>()
+                                .unwrap()
+                    ),
                     true,
                 ))),
                 TypeInfo::Array(a) => DataType::FixedSizeList(
                     Arc::new(Field::new(
                         "item",
-                        map_reflect_kind_to_arrow(a.item_type()),
+                        map_reflect_kind_to_arrow(
+                            registry.get(a.item_type_id())
+                                    .unwrap()
+                                    .data::<ReflectType>()
+                                    .unwrap()
+                        ),
                         true,
                     )),
-                    a.field_len() as i32,
+                    a.array_len() as i32,
                 ),
                 _ => DataType::Utf8, // Fallback for Tuple/Map/TupleStruct
             }
