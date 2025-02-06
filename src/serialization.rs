@@ -1,3 +1,5 @@
+use arrow::array::Array;
+use arrow::datatypes::Fields;
 use {
     arrow::{
         array::{ArrayRef, StringArray},
@@ -115,11 +117,11 @@ pub(crate) fn create_arrow_schema(
                 TypeInfo::Struct(s) => {
                     // Directly handle Vec3 without reflection
                     if s.type_path() == "bevy::math::Vec3" {
-                        DataType::Struct(vec![
+                        DataType::Struct(Fields::from(vec![
                             Field::new("x", DataType::Float32, false),
                             Field::new("y", DataType::Float32, false),
                             Field::new("z", DataType::Float32, false),
-                        ])
+                        ]))
                     } else {
                         // Existing reflection-based handling for other structs
                         DataType::Struct(
