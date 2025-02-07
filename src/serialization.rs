@@ -11,6 +11,7 @@ use {
     },
     std::{
         collections::{HashMap, HashSet},
+        marker::PhantomData,
         sync::Arc,
     },
 };
@@ -23,7 +24,11 @@ fn get_phantom_type(type_info: &TypeInfo) -> Option<DataType> {
             if field.name() == "target_type" {
                 // Extract inner type from PhantomData<T>
                 let path = field.type_path_table().short_path();
-                if let Some(inner_type) = path.split("PhantomData<").last().and_then(|s| s.strip_suffix('>')) {
+                if let Some(inner_type) = path
+                    .split("PhantomData<")
+                    .last()
+                    .and_then(|s| s.strip_suffix('>'))
+                {
                     return match inner_type {
                         "f32" => Some(DataType::Float32),
                         "f64" => Some(DataType::Float64),
@@ -124,9 +129,15 @@ pub(crate) fn create_arrow_schema(
     let mut fields = Vec::new();
     let registry = type_registry;
 
-    println!("\n[Schema Creation] Starting schema creation for {} components", components.len());
+    println!(
+        "\n[Schema Creation] Starting schema creation for {} components",
+        components.len()
+    );
     for (component_name, component_id) in components {
-        println!("\n[Schema Creation] Processing component: {}", component_name);
+        println!(
+            "\n[Schema Creation] Processing component: {}",
+            component_name
+        );
         println!("[Schema Metadata] Component ID: {:?}", component_id);
         // Get type information from ComponentId
         let type_info = world
@@ -135,21 +146,48 @@ pub(crate) fn create_arrow_schema(
             .expect("Component not registered");
         let type_id = type_info.type_id().expect("Missing type ID");
         println!("[Schema Metadata] Type ID: {:?}", type_id);
-        
+
         let type_reg = registry.get(type_id).expect("Type not in registry");
         println!("[Schema Metadata] Type Info: {:#?}", type_reg.type_info());
+
+        // Filter PhantomPersistTag
+        if type_reg
+            .type_info()
+            .type_path()
+            .contains("PhantomPersistTag")
+        {
+            continue;
+        }
 
         // Map to Arrow type
         let data_type = if type_reg.data::<ReflectComponent>().is_some() {
             match type_reg.type_info() {
+                TypeInfo::TupleStruct(inner_tuple) => {
+                    // check for PhantomPersistTag
+                    if inner_tuple.type_path().contains("PhantomPersistTag") {
+                        DataType::Utf8
+                    } else {
+                        unimplemented!()
+                    }
+                }
                 TypeInfo::Struct(s) => {
                     // Check for special parsing struct pattern
                     if let Some(target_type) = get_phantom_type(&TypeInfo::Struct(s.clone())) {
                         // Handle special struct with output + phantom type
-                        DataType::Struct(Fields::from(vec![
-                            Field::new("output", target_type, false),
-                        ]))
-                    } else if s.type_path().contains("PhantomPersistTag") {
+                        DataType::Struct(Fields::from(vec![Field::new(
+                            "output",
+                            target_type,
+                            false,
+                        )]))
+                    } else if let Some(_output) = s.field("output") {
+                        // TODO: In the future, output type component will have the shape of
+                        // struct ThisOutputComponentWithExportTagWithExplictTyping {
+                        //     output: String OR ByteArray,
+                        //     target_type: PhantomData<TargetType like DateTime or GeoLocation>
+                        // }
+                        // then we'd have get the phantom data type innard, and do a parse::<target_type> on it
+                        // to get the output
+
                         DataType::Utf8
                     } else {
                         // Existing reflection-based handling for other structs
@@ -164,12 +202,8 @@ pub(crate) fn create_arrow_schema(
                                     } else {
                                         DataType::Utf8
                                     };
-                                    
-                                    Field::new(
-                                        field.name(),
-                                        field_type,
-                                        true,
-                                    )
+
+                                    Field::new(field.name(), field_type, true)
                                 })
                                 .collect(),
                         )
@@ -214,8 +248,11 @@ pub(crate) fn create_arrow_schema(
         };
 
         let short_name = component_name.split("::").last().unwrap();
-        println!("[Schema Result] Final field: {} ({:#?})", short_name, data_type);
-        fields.push(Field::new(short_name, data_type, false));  // Changed to non-nullable
+        println!(
+            "[Schema Result] Final field: {} ({:#?})",
+            short_name, data_type
+        );
+        fields.push(Field::new(short_name, data_type, false)); // Changed to non-nullable
     }
 
     Schema::new(fields)

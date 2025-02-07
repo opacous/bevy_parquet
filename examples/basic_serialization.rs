@@ -20,7 +20,7 @@ struct Velocity {
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
 struct Health {
-    value: i32,
+    output: i32,
 }
 
 // inconsequential component that is sometimes bundled with Health
@@ -82,8 +82,6 @@ fn exit_after_timeout(time: Res<Time>, mut exit: EventWriter<AppExit>) {
 
 // Spawn some entities with different component combinations
 fn spawn_things(mut commands: Commands) {
-    commands.spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 1.0 }, PhantomPersistTag));
-    commands.spawn((Position { x: 5.0, y: 5.0 }, Velocity { x: -1.0, y: 0.0 }, PhantomPersistTag));
-    commands.spawn((Health { value: 100 }, DontSerialize { inner: true }, PhantomPersistTag));
-    commands.spawn((Health { value: 50 }, PhantomPersistTag));
+    commands.spawn((Health { output: 100 }, DontSerialize { inner: true }, PhantomPersistTag));
+    commands.spawn((Health { output: 50 }, PhantomPersistTag));
 }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use arrow::datatypes::SchemaRef;
 use arrow::array::RecordBatch;
 use parquet::arrow::ArrowWriter;
+use parquet::format::FileMetaData;
 use parquet::file::properties::WriterProperties;
 use crate::ParquetError;
 
@@ -31,7 +32,7 @@ impl ParquetWriter {
             .map_err(|e| ParquetError::ParquetWrite(e.to_string()))
     }
 
-    pub fn finalize(self) -> Result<(), ParquetError> {
+    pub fn finalize(self) -> Result<FileMetaData, ParquetError> {
         self.writer
             .close()
             .map_err(|e| ParquetError::ParquetWrite(e.to_string()))
