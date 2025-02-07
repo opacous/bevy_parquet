@@ -15,12 +15,12 @@ use {
     },
 };
 
-fn get_phantom_type<T: Reflect + TypePath>(type_info: &TypeInfo) -> Option<DataType> {
+fn get_phantom_type(type_info: &TypeInfo) -> Option<DataType> {
     if let TypeInfo::Struct(s) = type_info {
         for field in s.iter() {
             if field.name() == "target_type" {
                 // Extract inner type from PhantomData<T>
-                let path = field.reflect_type_path();
+                let path = field.type_path_table().short_path();
                 if let Some(inner_type) = path.split("PhantomData<").last().and_then(|s| s.strip_suffix('>')) {
                     return match inner_type {
                         "f32" => Some(DataType::Float32),
@@ -141,12 +141,8 @@ pub(crate) fn create_arrow_schema(
                         DataType::Struct(Fields::from(vec![
                             Field::new("output", target_type, false),
                         ]))
-                    } else if s.type_path() == "bevy::math::Vec3" {
-                        DataType::Struct(Fields::from(vec![
-                            Field::new("x", DataType::Float32, false),
-                            Field::new("y", DataType::Float32, false),
-                            Field::new("z", DataType::Float32, false),
-                        ]))
+                    } else if s.type_path().contains("PhantomPersistTag") {
+                        DataType::Utf8
                     } else {
                         // Existing reflection-based handling for other structs
                         DataType::Struct(
