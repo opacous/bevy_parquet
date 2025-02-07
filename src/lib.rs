@@ -77,6 +77,12 @@ pub fn serialize_world(world: &mut World) -> Result<(), ParquetError> {
         .collect::<Vec<_>>();
     state.component_clusters = clusters.clone();
 
+    // Log cluster analysis
+    println!("\n[Cluster Analysis] Detected {} component clusters:", clusters.len());
+    for (i, cluster) in clusters.iter().enumerate() {
+        println!("Cluster {}: {:?}", i, cluster.iter().map(|(n,_)| n).collect::<Vec<_>>());
+    }
+
     // Process each cluster as a row group
     for (i, cluster) in clusters.into_iter().enumerate() {
         println!("Processing cluster {:?}", cluster);
@@ -161,10 +167,12 @@ fn component_to_arrow_array(
     component_info: (String, ComponentId),
     type_registry: &TypeRegistry,
 ) -> Result<ArrayRef, ParquetError> {
+    println!("\n[Serialization] Processing component: {}", component_info.0);
     let mut values = Vec::with_capacity(entities.len());
     let components = world.components();
 
     for &entity in entities {
+        println!("[Entity] Processing entity {:?}", entity);
         if let Some(entity_ref) = world.get_entity(entity) {
             let reflect = world
                 .components()

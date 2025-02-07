@@ -17,7 +17,9 @@ use {
 
 fn get_phantom_type(type_info: &TypeInfo) -> Option<DataType> {
     if let TypeInfo::Struct(s) = type_info {
+        println!("[Phantom Detection] Analyzing struct {}", s.type_path());
         for field in s.iter() {
+            println!("[Phantom Detection] Checking field: {}", field.name());
             if field.name() == "target_type" {
                 // Extract inner type from PhantomData<T>
                 let path = field.type_path_table().short_path();
@@ -122,14 +124,20 @@ pub(crate) fn create_arrow_schema(
     let mut fields = Vec::new();
     let registry = type_registry;
 
+    println!("\n[Schema Creation] Starting schema creation for {} components", components.len());
     for (component_name, component_id) in components {
+        println!("\n[Schema Creation] Processing component: {}", component_name);
+        println!("[Schema Metadata] Component ID: {:?}", component_id);
         // Get type information from ComponentId
         let type_info = world
             .components()
             .get_info(*component_id)
             .expect("Component not registered");
         let type_id = type_info.type_id().expect("Missing type ID");
+        println!("[Schema Metadata] Type ID: {:?}", type_id);
+        
         let type_reg = registry.get(type_id).expect("Type not in registry");
+        println!("[Schema Metadata] Type Info: {:#?}", type_reg.type_info());
 
         // Map to Arrow type
         let data_type = if type_reg.data::<ReflectComponent>().is_some() {
@@ -206,7 +214,8 @@ pub(crate) fn create_arrow_schema(
         };
 
         let short_name = component_name.split("::").last().unwrap();
-        fields.push(Field::new(short_name, data_type, true));
+        println!("[Schema Result] Final field: {} ({:#?})", short_name, data_type);
+        fields.push(Field::new(short_name, data_type, false));  // Changed to non-nullable
     }
 
     Schema::new(fields)
